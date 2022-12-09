@@ -1,0 +1,18 @@
+[package]
+name = "skylight"
+version = "0.0.0"
+edition = "2021"
+authors = ["Connor Power <connor@connorpower.com>"]
+license = "MIT"
+repository = "https://github.com/connorpower/skylight/"
+description = "Lightweight management of native Win32 windows with high DPI awareness, input handling, and support for light and dark themes."
+keywords = [
+    "win32",
+    "keyboard",
+    "mouse",
+    "high-dpi",
+    "hwnd",
+]
+categories = [
+    "gui",
+]
