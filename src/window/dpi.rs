@@ -1,6 +1,6 @@
+use ::geoms::d2::{Rect2D, Size2D};
 use ::num_traits::{AsPrimitive, Num};
 use ::std::fmt::{self, Debug, Display};
-use ::win_geom::d2::{Rect2D, Size2D};
 use ::windows::Win32::{Foundation::HWND, UI::HiDpi::GetDpiForWindow};
 
 /// The DPI of a monitor or device, used to handle high-DPI rendering. DPI

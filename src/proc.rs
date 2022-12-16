@@ -41,7 +41,7 @@ thread_local! {
 /// # Usage
 ///
 /// ```rust
-/// use ::win32::proc::ComLibraryHandle;
+/// use ::skylight::proc::ComLibraryHandle;
 ///
 /// {
 ///     let _handle = ComLibraryHandle::acquire();

@@ -22,7 +22,7 @@ use ::windows::{
 /// ### Usage
 ///
 /// ```
-/// use ::win32::invoke;
+/// use ::skylight::invoke;
 /// use ::windows::Win32::System::LibraryLoader::GetModuleHandleA;
 ///
 /// let _module = invoke::chk!(res; GetModuleHandleA(None)).unwrap();

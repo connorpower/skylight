@@ -6,6 +6,7 @@ use crate::{
     window::{Theme, WindowClass, DPI},
 };
 
+use ::geoms::d2::{Point2D, Rect2D, Size2D};
 use ::parking_lot::RwLock;
 use ::std::{
     cell::{Cell, UnsafeCell},
@@ -19,7 +20,6 @@ use ::std::{
 };
 use ::tracing::debug;
 use ::widestring::U16CString;
-use ::win_geom::d2::{Point2D, Rect2D, Size2D};
 use ::windows::{
     core::PCWSTR,
     Win32::{
@@ -119,7 +119,7 @@ impl WindowInner {
         // obtain the window's DPI and use it to scale the window size_
         let dpi = DPI::detect(hwnd);
         let mut rect = dpi
-            .scale_rect(Rect2D::from_size_and_origin(size, Point2D::zero()))
+            .scale_rect(Rect2D::with_size_and_origin(size, Point2D::zero()))
             .into();
         chk!(bool; AdjustWindowRectExForDpi(
             &mut rect,

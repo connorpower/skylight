@@ -26,7 +26,7 @@ impl DebugMsg {
     ///
     /// ```
     /// use ::windows::Win32::Foundation::{LPARAM, WPARAM};
-    /// use ::win32::debug::DebugMsg;
+    /// use ::skylight::debug::DebugMsg;
     ///
     /// let umsg = 0x0047; // WM_WINDOWPOSCHANGED;
     /// let wparam = WPARAM(0x0000000000000000);
