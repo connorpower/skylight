@@ -315,6 +315,7 @@ dependencies = [
  "paste",
  "pretty_assertions",
  "strum",
+ "tap",
  "thiserror",
  "tokio",
  "tracing",

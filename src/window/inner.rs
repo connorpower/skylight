@@ -1,7 +1,6 @@
 use crate::{
-    errors::*,
+    errors::{self, Context, Result},
     input::keyboard::{Adapter as KbdAdapter, Keyboard},
-    invoke::chk,
     types::*,
     window::{Theme, WindowClass, DPI},
 };
@@ -11,6 +10,7 @@ use ::parking_lot::RwLock;
 use ::std::{
     cell::{Cell, UnsafeCell},
     marker::PhantomData,
+    num::NonZeroIsize,
     ops::DerefMut,
     rc::Rc,
     sync::{
@@ -18,6 +18,7 @@ use ::std::{
         Arc,
     },
 };
+use ::tap::Pipe;
 use ::tracing::debug;
 use ::widestring::U16CString;
 use ::windows::{
@@ -92,10 +93,13 @@ impl WindowInner {
         });
 
         let hwnd = {
-            let module = chk!(res; GetModuleHandleW(None))?;
+            let module = unsafe { GetModuleHandleW(None) }
+                .context("Failed to construct new window")
+                .function("GetModuleHandleW")?;
             let title = U16CString::from_str(title).expect("Window name contained null byte");
 
-            chk!(ptr; CreateWindowExW(
+            unsafe {
+                CreateWindowExW(
                     WINDOW_EX_STYLE::default(),
                     PCWSTR::from_raw(this.window_class.class_name().as_ptr()),
                     PCWSTR::from_raw(title.as_ptr()),
@@ -110,9 +114,12 @@ impl WindowInner {
                     None,
                     None,
                     module,
-                    Some(Rc::into_raw(this.clone()) as *const _)
+                    Some(Rc::into_raw(this.clone()) as *const _),
                 )
-            )?
+            }
+            .pipe(|hwnd| (hwnd.0 != 0).then_some(hwnd))
+            .context("Failed to create window")
+            .function("CreateWindowExW")?
         };
         this.hwnd.set(hwnd);
 
@@ -122,27 +129,37 @@ impl WindowInner {
         let mut rect = dpi
             .scale_rect(Rect2D::with_size_and_origin(size, Point2D::zero()))
             .into();
-        chk!(bool; AdjustWindowRectExForDpi(
-            &mut rect,
-            WS_OVERLAPPEDWINDOW,
-            false,
-            WINDOW_EX_STYLE::default(),
-            dpi.into()
-        ))?;
+        unsafe {
+            AdjustWindowRectExForDpi(
+                &mut rect,
+                WS_OVERLAPPEDWINDOW,
+                false,
+                WINDOW_EX_STYLE::default(),
+                dpi.into(),
+            )
+        }
+        .ok()
+        .context("Failed to calculate High-DPI window size")
+        .function("AdjustWindowRectExForDpi")?;
 
         let pixel_width = rect.right - rect.left;
         let pixel_height = rect.bottom - rect.top;
         ::tracing::warn!("adjusted window size: {pixel_width} x {pixel_height}");
 
-        chk!(bool; SetWindowPos(
-            hwnd,
-            HWND::default(),
-            0,
-            0,
-            pixel_width,
-            pixel_height,
-            SWP_NOMOVE
-        ))?;
+        unsafe {
+            SetWindowPos(
+                hwnd,
+                HWND::default(),
+                0,
+                0,
+                pixel_width,
+                pixel_height,
+                SWP_NOMOVE,
+            )
+        }
+        .ok()
+        .context("Failed to position window for initial display")
+        .function("SetWindowPos")?;
 
         this.set_theme(theme);
         unsafe {
@@ -188,14 +205,16 @@ impl WindowInner {
 
         self.theme.set(theme);
 
-        chk!(res;
+        unsafe {
             DwmSetWindowAttribute(
                 self.hwnd(),
                 DWMWA_USE_IMMERSIVE_DARK_MODE,
                 &val as *const i32 as _,
-                ::std::mem::size_of::<i32>() as u32
+                ::std::mem::size_of::<i32>() as u32,
             )
-        )
+        }
+        .context("Failed to set immersive dark mode preferences")
+        .function("DwmSetWindowAttribute")
         .unwrap();
     }
 
@@ -226,8 +245,11 @@ impl WindowInner {
     }
 
     pub(super) fn destroy(&self) -> Result<()> {
-        chk!(bool; DestroyWindow(self.hwnd()))?;
-        Ok(())
+        unsafe { DestroyWindow(self.hwnd()) }
+            .ok()
+            .context("Failed to destroy window")
+            .function("DestroyWindow")
+            .map(|_| ())
     }
 
     /// Handles a Win32 message.
@@ -262,7 +284,12 @@ impl WindowInner {
 
                 // Our window is being destroyed, so we must clean up our Rc'd
                 // handle on the Win32 side.
-                let self_ = chk!(last_err; SetWindowLongPtrW(self.hwnd(), GWLP_USERDATA, 0))
+                errors::clear_last_error();
+
+                let self_ = unsafe { SetWindowLongPtrW(self.hwnd(), GWLP_USERDATA, 0) }
+                    .pipe(|val| errors::get_last_err().map(|_| val))
+                    .context("Failed to clear Rust window reference from Win32 window data")
+                    .function("SetWindowLongPtrW")
                     .unwrap() as *const Self;
                 let _ = unsafe { Rc::from_raw(self_) };
 
@@ -290,12 +317,25 @@ impl WindowInner {
         // window.
         if umsg == WM_NCCREATE {
             let create_struct = lparam.0 as *const CREATESTRUCTW;
-            // SAFETY: The `CREATESRUCTA` structure is guaranteed by the Win32
-            // API to be valid if we've received an event of type `WM_NCCREATE`.
+            // SAFETY:
+            // The `CREATESRUCTA` structure is guaranteed by the Win32 API to be
+            // valid if we've received an event of type `WM_NCCREATE`.
             let self_ = unsafe { (*create_struct).lpCreateParams } as *const Self;
 
-            chk!(last_err; SetWindowLongPtrW(hwnd, GWLP_USERDATA, self_ as _)).unwrap();
-            chk!(last_err; SetWindowLongPtrW(hwnd, GWLP_WNDPROC, (Self::wnd_proc_thunk as usize) as isize))
+            errors::clear_last_error();
+            unsafe {
+                SetWindowLongPtrW(hwnd, GWLP_USERDATA, self_ as _);
+            }
+            errors::get_last_err()
+                .context("Failed to store reference to Rust window in Win32 window data")
+                .function("SetWindowLongPtrW")
+                .unwrap();
+            unsafe {
+                SetWindowLongPtrW(hwnd, GWLP_WNDPROC, (Self::wnd_proc_thunk as usize) as isize);
+            }
+            errors::get_last_err()
+                .context("Failed to swap Win32 window proc function")
+                .function("SetWindowLongPtrW")
                 .unwrap();
         }
 
@@ -311,7 +351,11 @@ impl WindowInner {
         wparam: WPARAM,
         lparam: LPARAM,
     ) -> LRESULT {
-        if let Ok(ptr) = chk!(nonzero_isize; GetWindowLongPtrW(hwnd, GWLP_USERDATA)) {
+        if let Ok(ptr) = unsafe { GetWindowLongPtrW(hwnd, GWLP_USERDATA) }
+            .pipe(NonZeroIsize::new)
+            .context("Failed to setup window messaging")
+            .function("GetWindowLongPtrW")
+        {
             let self_ = ptr.get() as *const Self;
 
             unsafe {

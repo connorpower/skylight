@@ -1,6 +1,5 @@
 //! Windows process and COM management.
 
-use crate::chk;
 use ::std::{
     cell::RefCell,
     rc::{Rc, Weak},
@@ -9,6 +8,8 @@ use ::windows::Win32::System::{
     Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED},
     Memory::{HeapEnableTerminationOnCorruption, HeapSetInformation},
 };
+
+use crate::errors::Context;
 
 /// Enables the terminate-on-corruption feature. If the heap manager detects an
 /// error in any heap used by the process, it calls the Windows Error Reporting
@@ -68,7 +69,10 @@ impl ComLibraryHandle {
             } else {
                 drop(cell_ref);
                 ::tracing::debug!("Initializing COM library (apartment-threaded)");
-                chk!(res; CoInitializeEx(None, COINIT_APARTMENTTHREADED )).unwrap();
+                unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }
+                    .context("Failed to initialize COM library for thread")
+                    .function("CoInitializeEx")
+                    .unwrap();
                 let handle = Rc::new(Self(()));
                 cell.replace(Rc::downgrade(&handle));
                 handle

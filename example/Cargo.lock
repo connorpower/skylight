@@ -363,6 +363,7 @@ dependencies = [
  "parking_lot",
  "paste",
  "strum",
+ "tap",
  "thiserror",
  "tokio",
  "tracing",

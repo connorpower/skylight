@@ -3,7 +3,6 @@
 use crate::{
     errors::*,
     input::keyboard::Keyboard,
-    invoke::chk,
     types::*,
     window::{Theme, WindowInner, DPI},
 };
@@ -200,7 +199,11 @@ impl Window {
     /// Set the window title.
     pub fn set_title(&self, title: &str) -> Result<()> {
         let string = U16CString::from_str_truncate(title);
-        chk!(bool; SetWindowTextW(self.hwnd(), PCWSTR::from_raw(string.as_ptr()))).map(|_| ())
+        unsafe { SetWindowTextW(self.hwnd(), PCWSTR::from_raw(string.as_ptr())) }
+            .ok()
+            .context("Failed to set window title")
+            .function("SetWindowTextW")
+            .map(|_| ())
     }
 }
 

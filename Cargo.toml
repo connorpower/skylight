@@ -20,6 +20,7 @@ geoms = { version = "0.0.1", features = ["win32"] }
 bitvec = "1.0.1"
 deku = "0.15"
 thiserror = "1.0.37"
+tap = "1.0.1"
 lazy_static = "1.4.0"
 maplit = "1.0.2"
 num-traits = "0.2.15"

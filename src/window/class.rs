@@ -1,12 +1,13 @@
-//! Win32 windows classs wrapper. Helps define classes e.g. "categories" of
-//! windows.
+//! Management of Win32 Windows classes.
 
-use crate::{errors::*, invoke::chk, types::*};
+use crate::{errors::*, types::*};
 
 use ::std::{
     fmt::Write,
+    num::NonZeroU16,
     sync::{Arc, Weak as SyncWeak},
 };
+use ::tap::prelude::*;
 use ::tracing::{debug, error};
 use ::widestring::U16CString;
 use ::windows::{
@@ -86,25 +87,26 @@ impl WindowClass {
             "Register window class"
         );
 
-        let module = chk!(res; GetModuleHandleW(None))?;
-        let cursor = chk!(res;
-            LoadCursorW(
-                HINSTANCE::default(),
-                IDC_ARROW
-            )
-        )?;
+        let module = unsafe { GetModuleHandleW(None) }
+            .context("Failed to get module handle to register window class")
+            .function("GetModuleHandleW")?;
+        let cursor = unsafe { LoadCursorW(HINSTANCE::default(), IDC_ARROW) }
+            .context("Failed to load cursor to register window class")
+            .function("LoadCursorW")?;
         let icon = icon_id
             .map(|resource_id: ResourceId| {
-                chk!(res;
+                unsafe {
                     LoadImageW(
                         module,
                         resource_id.into_pcwstr(),
                         IMAGE_ICON,
                         0,
                         0,
-                        LR_DEFAULTSIZE
+                        LR_DEFAULTSIZE,
                     )
-                )
+                }
+                .context("Failed to load icon when registering window class")
+                .function("LoadImageW")
             })
             .transpose()?;
 
@@ -117,15 +119,23 @@ impl WindowClass {
             hIcon: HICON(icon.map(|i| i.0).unwrap_or(0)),
             ..Default::default()
         };
-        let _atom = chk!(nonzero_u16; RegisterClassExW(&wnd_class))?;
+        let _atom = unsafe { RegisterClassExW(&wnd_class) }
+            .pipe(NonZeroU16::new)
+            .context("Failed to register window class")
+            .function("RegisterClassExW")?;
 
         Ok(Arc::new(Self { class_name }))
     }
 
     fn unregister(&self) -> Result<()> {
         debug!(wnd_class = ?self.class_name().to_string_lossy(), "Unregister window class");
-        let module = chk!(res; GetModuleHandleW(None))?;
-        chk!(bool; UnregisterClassW(PCWSTR::from_raw(self.class_name().as_ptr()), module))?;
+        let module = unsafe { GetModuleHandleW(None) }
+            .context("Failed to get current module handle")
+            .function("GetModuleHandleW")?;
+        unsafe { UnregisterClassW(PCWSTR::from_raw(self.class_name().as_ptr()), module) }
+            .ok()
+            .context("Failed to unregister window class")
+            .function("UnregisterClassW")?;
         Ok(())
     }
 }
