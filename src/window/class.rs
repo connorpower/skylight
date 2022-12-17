@@ -35,6 +35,16 @@ lazy_static! {
         Default::default();
 }
 
+/// A RAII object which manages Windows class registrations.
+///
+/// A windows class will be registered with the system the first time one is
+/// created. Subsequent requests for a windows class with the same properties
+/// will return a reference to the already registered class. When no more live
+/// references to a registered class exist, it will be automatically
+/// deregistered with the system to free resources.
+///
+/// Multiple different window classes can be registered and in use
+/// simultaneously.
 pub(super) struct WindowClass {
     class_name: U16CString,
 }
