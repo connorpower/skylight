@@ -26,8 +26,8 @@ use ::lazy_static::lazy_static;
 use ::parking_lot::Mutex;
 use ::std::collections::{hash_map::Entry, HashMap};
 
-/// Typedef for the Win32 windows procedure function - the primary entry point
-/// for the Windows message pump.
+/// Typedef for the Win32 Windows process message handler function - the primary
+/// entry point for the Windows message pump.
 type WndProc = extern "system" fn(HWND, u32, WPARAM, LPARAM) -> LRESULT;
 
 lazy_static! {

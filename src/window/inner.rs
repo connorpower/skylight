@@ -2,7 +2,7 @@ use crate::{
     errors::{self, Context, Result},
     input::keyboard::{Adapter as KbdAdapter, Keyboard},
     types::*,
-    window::{Theme, WindowClass, DPI},
+    window::{Theme, WindowClass, WindowsProcessMessage, DPI},
 };
 
 use ::geoms::d2::{Point2D, Rect2D, Size2D};
@@ -252,25 +252,25 @@ impl WindowInner {
             .map(|_| ())
     }
 
-    /// Handles a Win32 message.
+    /// Handles a Win32 message sent to this process.
     ///
     /// ## Return Value
     ///
     /// Returns `true` if the message was handled and should not be forwarded to
-    /// the default window procedure. Returns `false` if the message was not
-    /// handled, or was only intercepted/tapped on the way though and should
-    /// still be forwarded to the default procedure.
-    fn handle_message(&self, umsg: u32, wparam: WPARAM, lparam: LPARAM) -> bool {
-        ::tracing::trace!(msg = %crate::debug::DebugMsg::new(umsg, wparam, lparam));
+    /// the default handler. Returns `false` if the message was not handled, or
+    /// was only intercepted/tapped on the way though and should still be
+    /// forwarded to the default handler.
+    fn handle_message(&self, msg: WindowsProcessMessage) -> bool {
+        ::tracing::trace!(%msg);
 
-        if KbdAdapter::handles_msg(umsg, wparam, lparam) {
-            if let Some(event) = KbdAdapter::adapt(umsg, wparam, lparam) {
+        if KbdAdapter::handles_msg(msg) {
+            if let Some(event) = KbdAdapter::adapt(msg) {
                 self.keyboard.write().process_evt(event);
             }
             return true;
         }
 
-        match umsg {
+        match msg.identifier() {
             WM_PAINT => {
                 self.paint_request.store(true, Ordering::SeqCst);
                 false
@@ -296,16 +296,16 @@ impl WindowInner {
                 // Clear our window handle now that we're destroyed.
                 self.hwnd.set(HWND(0));
 
-                // forward to default procedure too
+                // forward to default handler too
                 false
             }
             _ => false,
         }
     }
 
-    /// C-function Win32 window procedure performs one-time setup of the
-    /// structures on the Win32 side to associate our Rust object with the Win32
-    /// object.
+    /// Free-function Windows process message handler which performs a one-time
+    /// setup of the structures on the Win32 side to associate our Rust object
+    /// with the Win32 object.
     extern "system" fn wnd_proc_setup(
         hwnd: HWND,
         umsg: u32,
@@ -339,7 +339,7 @@ impl WindowInner {
                 .unwrap();
         }
 
-        // We _always_ pass our message through to the default window procedure.
+        // We _always_ pass our message through to the default window handler.
         unsafe { DefWindowProcW(hwnd, umsg, wparam, lparam) }
     }
 
@@ -361,7 +361,9 @@ impl WindowInner {
             unsafe {
                 // Add extra retain for the duration of following call
                 Rc::increment_strong_count(self_);
-                if Rc::from_raw(self_).handle_message(umsg, wparam, lparam) {
+                if Rc::from_raw(self_)
+                    .handle_message(WindowsProcessMessage::new(umsg, wparam, lparam))
+                {
                     return LRESULT(0);
                 }
             }

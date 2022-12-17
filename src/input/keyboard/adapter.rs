@@ -3,11 +3,14 @@
 
 use ::deku::prelude::*;
 use ::windows::Win32::{
-    Foundation::{LPARAM, WPARAM},
+    Foundation::LPARAM,
     UI::WindowsAndMessaging::{WM_CHAR, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP},
 };
 
-use super::{KeyCode, KeyEvent};
+use crate::{
+    input::keyboard::{KeyCode, KeyEvent},
+    window::WindowsProcessMessage,
+};
 
 /// Win32 Keystroke message flags as defined here:
 /// https://learn.microsoft.com/en-us/windows/win32/inputdev/about-keyboard-input#keystroke-message-flags
@@ -54,7 +57,13 @@ pub(crate) struct KeystrokeFlags {
 
 impl From<LPARAM> for KeystrokeFlags {
     fn from(lparam: LPARAM) -> Self {
-        Self::from_bytes((&(lparam.0 as u32).to_be_bytes(), 0))
+        lparam.0.into()
+    }
+}
+
+impl From<isize> for KeystrokeFlags {
+    fn from(lparam: isize) -> Self {
+        Self::from_bytes((&(lparam as u32).to_be_bytes(), 0))
             .unwrap()
             .1
     }
@@ -66,37 +75,37 @@ impl Adapter {
     /// Indicates whether the [Adapter] handles the given message. If it does,
     /// [adapt] should be called and the message should be considered handled
     /// regardless of whether a [KeyEvent] is generated.
-    pub(crate) const fn handles_msg(umsg: u32, _wparam: WPARAM, _lparam: LPARAM) -> bool {
+    pub(crate) const fn handles_msg(msg: WindowsProcessMessage) -> bool {
         matches!(
-            umsg,
+            msg.identifier(),
             WM_KEYDOWN | WM_SYSKEYDOWN | WM_KEYUP | WM_SYSKEYUP | WM_CHAR
         )
     }
 
-    /// Adapts a Win32 windows procedure function into a [KeyEvent]. This
-    /// function should only be called if [handles_msg] indicated that the
-    /// [Adapter] will handle a wnd proc message with these parameters.
-    pub(crate) fn adapt(umsg: u32, wparam: WPARAM, lparam: LPARAM) -> Option<KeyEvent> {
-        match umsg {
+    /// Adapts a Windows process message into a [KeyEvent]. This function should
+    /// only be called if [handles_msg] indicated that the [Adapter] will handle
+    /// a wnd proc message with these parameters.
+    pub(crate) fn adapt(msg: WindowsProcessMessage) -> Option<KeyEvent> {
+        match msg.identifier() {
             WM_KEYDOWN | WM_SYSKEYDOWN => {
-                KeyCode::try_from(wparam.0)
+                KeyCode::try_from(msg.wparam())
                     .ok()
                     .map(|key_code| KeyEvent::KeyDown {
                         key_code,
-                        flags: lparam.into(),
+                        flags: msg.lparam().into(),
                     })
             }
             WM_KEYUP | WM_SYSKEYUP => {
-                KeyCode::try_from(wparam.0)
+                KeyCode::try_from(msg.wparam())
                     .ok()
                     .map(|key_code| KeyEvent::KeyUp {
                         key_code,
-                        flags: lparam.into(),
+                        flags: msg.lparam().into(),
                     })
             }
             WM_CHAR => Some(KeyEvent::Input {
-                wchar: wparam.0 as u16,
-                flags: lparam.into(),
+                wchar: msg.wparam() as u16,
+                flags: msg.lparam().into(),
             }),
             _ => None,
         }

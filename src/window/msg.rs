@@ -1,4 +1,4 @@
-//! Tools for debugging Win32 API and window messages.
+//! Win32 Windows process messages.
 
 use ::lazy_static::lazy_static;
 use ::maplit::hashmap;
@@ -9,39 +9,59 @@ use ::std::{
 };
 use ::windows::Win32::Foundation::{LPARAM, WPARAM};
 
-/// A debug wrapper which can be used to wrap and then pretty print Win32 Window
-/// procedure messages.
+/// A message sent by the Windows operating system to this process. This is the
+/// core message type used by the native Win32 event loop.
 ///
-/// This type is useful for exploring the messages that a Window procedure
-/// receives, or for logging particular messages of interest. [`DebugMsg`] is
-/// intended only as a debugging/code-exploration aid, and doesn't appear in any
-/// other public interface in this crate.
+/// The operating system communicates with your application window by passing
+/// messages to it. A message is simply a numeric code that designates a
+/// particular event. For example, if the user presses the left mouse button,
+/// the window receives a message that has the following message code.
 ///
-/// Typically, you construct a [`DebugMsg`] by wrapping the parameters to the
-/// window procedure and then logging the [`Display`] string for the msg.
-///
-/// [`Display`]: std::fmt::Display
+/// [`WindowsProcessMessage`] has a [`Display`] implementation which
+/// is useful a debugging/code-exploration aid when examining the Windows
+/// messages sent to a process.
 ///
 /// ### Usage
 ///
 /// ```
 /// use ::windows::Win32::Foundation::{LPARAM, WPARAM};
-/// use ::skylight::debug::DebugMsg;
+/// use ::skylight::window::WindowsProcessMessage;
 ///
-/// fn wnd_proc(hwnd: HWND,umsg: u32,wparam: WPARAM,lparam: LPARAM) {
-///     println!("{}", DebugMsg::new(umsg, wparam, lparam));
+/// fn wnd_proc(hwnd: HWND, msg: WindowsProcessMessage) {
+///     println!("{}", msg);
 ///
 ///     // ...
 /// }
 /// ```
+///
+/// [`Display`]: std::fmt::Display
 #[derive(Clone, Copy, Debug)]
-pub struct DebugMsg {
-    msg: u32,
+pub struct WindowsProcessMessage {
+    umsg: u32,
     wparam: usize,
     lparam: isize,
 }
 
-impl DebugMsg {
+impl WindowsProcessMessage {
+    /// The message identifier, typically named `uMsg` in Win32 code.
+    pub const fn identifier(&self) -> u32 {
+        self.umsg
+    }
+
+    /// Additional information about the message. The exact meaning depends on
+    /// the the message code.
+    pub const fn wparam(&self) -> usize {
+        self.wparam
+    }
+
+    /// Additional information about the message. The exact meaning depends on
+    /// the the message code.
+    pub const fn lparam(&self) -> isize {
+        self.lparam
+    }
+}
+
+impl WindowsProcessMessage {
     /// Construct a new `DebugMsg`. Typically, the value is immediately printed
     /// and discarded.
     ///
@@ -49,7 +69,7 @@ impl DebugMsg {
     ///
     /// ```
     /// use ::windows::Win32::Foundation::{LPARAM, WPARAM};
-    /// use ::skylight::debug::DebugMsg;
+    /// use ::skylight::windows::WindowsProcessMessage;
     ///
     /// let umsg = 0x0047; // WM_WINDOWPOSCHANGED;
     /// let wparam = WPARAM(0x0000000000000000);
@@ -57,9 +77,9 @@ impl DebugMsg {
     ///
     /// println!("{}", DebugMsg::new(umsg, wparam, lparam));
     /// ```
-    pub fn new(msg: u32, wparam: WPARAM, lparam: LPARAM) -> Self {
+    pub fn new(umsg: u32, wparam: WPARAM, lparam: LPARAM) -> Self {
         Self {
-            msg,
+            umsg,
             wparam: wparam.0,
             lparam: lparam.0,
         }
@@ -68,13 +88,13 @@ impl DebugMsg {
     /// The name of the message, if known.
     pub fn name(&self) -> Cow<'static, str> {
         MSG_NAMES
-            .get(&self.msg)
+            .get(&self.umsg)
             .map(|s| Cow::Borrowed(*s))
-            .unwrap_or_else(|| Cow::Owned(format!("UNKNOWN MSG ({msg:#0X})", msg = self.msg)))
+            .unwrap_or_else(|| Cow::Owned(format!("UNKNOWN MSG ({msg:#0X})", msg = self.umsg)))
     }
 }
 
-impl Display for DebugMsg {
+impl Display for WindowsProcessMessage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -1149,7 +1169,7 @@ mod tests {
 
     #[test]
     fn test_msg_debug_formatting() {
-        let msg = DebugMsg::new(0x0020, WPARAM(0x2706A6), LPARAM(0x2000014));
+        let msg = WindowsProcessMessage::new(0x0020, WPARAM(0x2706A6), LPARAM(0x2000014));
         assert_eq!(
             &msg.to_string(),
             "WM_SETCURSOR                  wparam: 0x00000000002706A6 lparam: 0x0000000002000014",

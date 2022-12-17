@@ -123,9 +123,11 @@ mod dpi;
 pub(crate) mod inner;
 mod wnd;
 pub use builder::*;
+mod msg;
 use class::*;
 pub use dpi::*;
 use inner::*;
+pub use msg::*;
 pub use wnd::*;
 
 /// The system theme, either light or dark.
