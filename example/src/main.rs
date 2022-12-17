@@ -3,11 +3,11 @@
 // launched the app. Useful mostly for debugging.
 #![cfg_attr(not(feature = "stdio"), windows_subsystem = "windows")]
 
+mod resources;
+
+use crate::resources::FERRIS_ICON;
 use ::geoms::d2::Size2D;
-use ::skylight::{
-    types::ResourceId,
-    window::{Builder, Theme},
-};
+use ::skylight::window::{Builder, Theme};
 use ::tracing_subscriber::{fmt, prelude::*, EnvFilter};
 use ::windows::Win32::UI::WindowsAndMessaging::{
     DispatchMessageW, GetMessageW, PostQuitMessage, TranslateMessage, MSG,
@@ -26,7 +26,7 @@ pub fn main() {
             height: 640,
         })
         .with_title("Hello, Redmond!")
-        .with_icon(ResourceId(1))
+        .with_icon(FERRIS_ICON.id().into())
         .with_theme(Theme::DarkMode)
         .build()
         .expect("Failed to create main window");
