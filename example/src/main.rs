@@ -5,11 +5,17 @@ use ::skylight::{
     types::ResourceId,
     window::{Builder, Theme},
 };
+use ::tracing_subscriber::{fmt, prelude::*, EnvFilter};
 use ::windows::Win32::UI::WindowsAndMessaging::{
     DispatchMessageW, GetMessageW, PostQuitMessage, TranslateMessage, MSG,
 };
 
 pub fn main() {
+    ::tracing_subscriber::registry()
+        .with(fmt::layer())
+        .with(EnvFilter::from_default_env())
+        .init();
+
     // Build and display a new window.
     let mut main_window = Builder::new()
         .with_size(Size2D {
