@@ -64,7 +64,7 @@ pub(super) struct WindowInner {
     /// request can be cleared if it is to be ignored.
     close_request: AtomicBool,
     /// Stores an outstanding paint request from the Win32 side.
-    redraw_request: AtomicBool,
+    paint_request: AtomicBool,
     /// Keyboard and text input state.
     keyboard: RwLock<Keyboard>,
 }
@@ -87,7 +87,7 @@ impl WindowInner {
             size,
             theme: Cell::new(theme),
             close_request: AtomicBool::new(false),
-            redraw_request: AtomicBool::new(true), // Request immediate draw
+            paint_request: AtomicBool::new(true), // Request immediate draw
             keyboard: RwLock::new(Keyboard::new()),
         });
 
@@ -199,19 +199,26 @@ impl WindowInner {
         .unwrap();
     }
 
-    /// Returns whether the window has requested to close, and immediately
-    /// clears this request. Window is not actually closed until it is
-    /// dropped, so the close request can be ignored if needed.
-    pub(super) fn clear_close_request(&self) -> bool {
-        self.close_request.swap(false, Ordering::SeqCst)
+    /// Returns whether the window is requesting to close.
+    pub(super) fn is_requesting_close(&self) -> bool {
+        self.close_request.load(Ordering::SeqCst)
     }
 
-    /// Returns whether the window has requested to redraw, and immediately
-    /// clears this request. Window is not actually redrawn until it is painted
-    /// by external higher level code, so the close request can be ignored if
-    /// needed.
-    pub(super) fn clear_redraw_request(&self) -> bool {
-        self.redraw_request.swap(false, Ordering::SeqCst)
+    /// Clears a pending request to close. The window will not request to close
+    /// until the next interaction or message triggers this.
+    pub(super) fn clear_close_request(&self) {
+        self.close_request.store(false, Ordering::SeqCst);
+    }
+
+    /// Returns whether the window is requesting to paint.
+    pub(super) fn is_requesting_paint(&self) -> bool {
+        self.paint_request.load(Ordering::SeqCst)
+    }
+
+    /// Clears a pending request to paint. The window will not request to paint
+    /// until the next interaction or message triggers this.
+    pub(super) fn clear_paint_request(&self) {
+        self.paint_request.store(false, Ordering::SeqCst)
     }
 
     pub fn keyboard(&self) -> impl DerefMut<Target = Keyboard> + '_ {
@@ -242,9 +249,8 @@ impl WindowInner {
         }
 
         match umsg {
-            // TODO: WM_DPICHANGED (+send to d2d)
             WM_PAINT => {
-                self.redraw_request.store(true, Ordering::SeqCst);
+                self.paint_request.store(true, Ordering::SeqCst);
                 false
             }
             WM_CLOSE => {

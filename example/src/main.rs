@@ -23,7 +23,7 @@ pub fn main() {
     .expect("Failed to create main window");
 
     // Pump our Win32 message loop. The window will automatically handle most
-    // aspects, we just need to test for any pending close or redraw requests
+    // aspects, we just need to test for any pending close or paint requests
     // and action them accordingly.
     let mut msg = MSG::default();
     while unsafe { GetMessageW(&mut msg, None, 0, 0) }.as_bool() {
@@ -32,11 +32,13 @@ pub fn main() {
             DispatchMessageW(&msg);
         }
 
-        if main_window.clear_redraw_request() {
-            // TODO: paint background
+        if main_window.is_requesting_paint() {
+            // paint as needed (Direct2D, Direct3D, GDI, etc.)
+            main_window.clear_paint_request();
         }
 
-        if main_window.clear_close_request() {
+        if main_window.is_requesting_close() {
+            main_window.clear_close_request();
             unsafe {
                 PostQuitMessage(0);
             }

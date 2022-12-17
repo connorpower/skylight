@@ -21,6 +21,47 @@ use ::windows::{
 ///
 /// A [Window] is `!Sync + !Send` as Win32 windows must be controlled by the
 /// same thread on which they were created.
+/// # Example
+///
+/// ```no_run
+/// use ::skylight::window::{Window, Theme};
+/// use ::windows::Win32::UI::WindowsAndMessaging::{
+///     DispatchMessageW, GetMessageW, PostQuitMessage, TranslateMessage, MSG,
+/// };
+/// use ::geoms::d2::Size2D;
+///
+/// let mut window = Window::new(
+///     Size2D {
+///         width: 720,
+///         height: 640,
+///     },
+///     "Hello, Redmond!",
+///     None,
+///     Theme::DarkMode,
+/// )
+/// .expect("Failed to create main window");
+///
+/// // Handle requests in the message loop
+/// let mut msg = MSG::default();
+/// while unsafe { GetMessageW(&mut msg, None, 0, 0) }.as_bool() {
+///     unsafe {
+///         TranslateMessage(&msg);
+///         DispatchMessageW(&msg);
+///     }
+///
+///     if window.is_requesting_paint() {
+///         // paint as needed (Direct2D, Direct3D, GDI, etc.)
+///         window.clear_paint_request();
+///     }
+///
+///     if window.is_requesting_close() {
+///         window.clear_close_request();
+///         unsafe {
+///             PostQuitMessage(0);
+///         }
+///     }
+/// }
+/// ```
 pub struct Window {
     /// The inner refcounted window object. A clone of this object is held on
     /// the win32 API side and should be released when the window is destroyed.
@@ -67,19 +108,133 @@ impl Window {
         DPI::detect(self.hwnd())
     }
 
-    /// Returns whether the window has requested to close, and immediately
-    /// clears this request. Window is not actually closed until it is
-    /// dropped, so the close request can be ignored if needed.
-    pub fn clear_close_request(&mut self) -> bool {
-        self.inner.clear_close_request()
+    /// Returns whether the window is requesting to close.
+    ///
+    /// The window is not actually closed until it is dropped, so the [`Window`]
+    /// should usually be dropped if this flag is set.  The close request can be
+    /// ignored if needed, and the request to close can be cleared.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use ::skylight::window::{Window, Theme};
+    /// # use ::geoms::d2::Size2D;
+    /// # let mut window = Window::new(
+    /// #     Size2D {
+    /// #         width: 720,
+    /// #         height: 640,
+    /// #     },
+    /// #     "Hello, Redmond!",
+    /// #     None,
+    /// #     Theme::DarkMode,
+    /// # )
+    /// # .expect("Failed to create main window");
+    ///
+    /// // Typically invoked within the core message loop:
+    /// if window.is_requesting_close() {
+    ///     window.clear_close_request();
+    ///     // Drop window, or post quit message if the app should terminate,
+    ///     // or simply ignore the request.
+    /// }
+    /// ```
+    pub fn is_requesting_close(&mut self) -> bool {
+        self.inner.is_requesting_close()
     }
 
-    /// Returns whether the window has requested to redraw, and immediately
-    /// clears this request. Window is not actually redrawn until it is painted
-    /// by external higher level code, so the close request can be ignored if
-    /// needed.
-    pub fn clear_redraw_request(&mut self) -> bool {
-        self.inner.clear_redraw_request()
+    /// Clears a pending close request.
+    ///
+    /// This should called after handling the close request. Handling a close
+    /// request involves dropping the window. During this of dropping a
+    /// [`Window`], the Win32 API will invoke a flurry of messages, so it can be
+    /// sensible to clear the close request flag to avoid repeated handling.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use ::skylight::window::{Window, Theme};
+    /// # use ::geoms::d2::Size2D;
+    /// # let mut window = Window::new(
+    /// #     Size2D {
+    /// #         width: 720,
+    /// #         height: 640,
+    /// #     },
+    /// #     "Hello, Redmond!",
+    /// #     None,
+    /// #     Theme::DarkMode,
+    /// # )
+    /// # .expect("Failed to create main window");
+    ///
+    /// // Typically invoked within the core message loop:
+    /// if window.is_requesting_close() {
+    ///     window.clear_close_request();
+    ///     // Drop window, or post quit message if the app should terminate,
+    ///     // or simply ignore the request.
+    /// }
+    /// ```
+    pub fn clear_close_request(&mut self) {
+        self.inner.clear_close_request();
+    }
+
+    /// Returns whether the window has requested to be painted.
+    ///
+    /// The [`Window`] object provides no drawing functionality. This must be
+    /// handled by a higher level as appropriate via GDI, Direct2D, or Direct3D
+    /// call. The paint request can be ignored if needed.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use ::skylight::window::{Window, Theme};
+    /// # use ::geoms::d2::Size2D;
+    /// # let mut window = Window::new(
+    /// #     Size2D {
+    /// #         width: 720,
+    /// #         height: 640,
+    /// #     },
+    /// #     "Hello, Redmond!",
+    /// #     None,
+    /// #     Theme::DarkMode,
+    /// # )
+    /// # .expect("Failed to create main window");
+    ///
+    /// // Typically invoked within the core message loop:
+    /// if window.is_requesting_paint() {
+    ///     window.clear_paint_request();
+    ///     // paint as needed (Direct2D, Direct3D, GDI, etc.)
+    /// }
+    /// ```
+    pub fn is_requesting_paint(&mut self) -> bool {
+        self.inner.is_requesting_paint()
+    }
+
+    /// Clears a pending paint request.
+    ///
+    /// This should called each time after the window is painted to clear the
+    /// pending flag. The pending request can also be cleared without painting.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use ::skylight::window::{Window, Theme};
+    /// # use ::geoms::d2::Size2D;
+    /// # let mut window = Window::new(
+    /// #     Size2D {
+    /// #         width: 720,
+    /// #         height: 640,
+    /// #     },
+    /// #     "Hello, Redmond!",
+    /// #     None,
+    /// #     Theme::DarkMode,
+    /// # )
+    /// # .expect("Failed to create main window");
+    ///
+    /// // Typically invoked within the core message loop:
+    /// if window.is_requesting_paint() {
+    ///     window.clear_paint_request();
+    ///     // paint as needed (Direct2D, Direct3D, GDI, etc.)
+    /// }
+    pub fn clear_paint_request(&mut self) {
+        self.inner.clear_paint_request();
     }
 
     /// Reads the keyboard state. A read lock is held during this process, so
