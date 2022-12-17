@@ -22,13 +22,15 @@ pub fn main() {
     )
     .expect("Failed to create main window");
 
-    // Pump our Win32 message loop. The inner `main_window` will handle most
-    // aspects, we just need to test for any pending close or redraw flags and
-    // action them accordingly.
+    // Pump our Win32 message loop. The window will automatically handle most
+    // aspects, we just need to test for any pending close or redraw requests
+    // and action them accordingly.
     let mut msg = MSG::default();
     while unsafe { GetMessageW(&mut msg, None, 0, 0) }.as_bool() {
-        unsafe { TranslateMessage(&msg) };
-        unsafe { DispatchMessageW(&msg) };
+        unsafe {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
 
         if main_window.clear_redraw_request() {
             // TODO: paint background
