@@ -22,26 +22,26 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
 
     runs-on: windows-latest
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-        
+
       - name: Setup Pages
         uses: actions/configure-pages@v2
-        
+
       - name: Build Documentation
         run: cargo doc --lib --no-deps
-        
+
       - name: Create index
         run: |
-            '<meta http-equiv="refresh" content="0; url=win32">' | Out-File .\target\doc\index.html    
-        
+            '<meta http-equiv="refresh" content="0; url=skylight">' | Out-File .\target\doc\index.html
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v1
         with:
           path: './target/doc'
-          
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v1
