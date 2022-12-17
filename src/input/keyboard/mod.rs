@@ -2,8 +2,8 @@
 
 mod codes;
 mod event;
-mod kbd;
+mod keyboard;
 
 pub use codes::*;
 pub(crate) use event::*;
-pub use kbd::*;
+pub use keyboard::*;
