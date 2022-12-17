@@ -17,7 +17,7 @@ pub fn main() {
         .init();
 
     // Build and display a new window.
-    let mut main_window = Builder::new()
+    let main_window = Builder::new()
         .with_size(Size2D {
             width: 720,
             height: 640,
