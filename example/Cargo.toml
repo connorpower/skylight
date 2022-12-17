@@ -5,6 +5,14 @@ edition = "2021"
 authors = ["Connor Power <connor@connorpower.com>"]
 build = "build.rs"
 
+[features]
+# Enables a stdio output (useful for debugging with traces from a terminal).
+# Acheives this by setting the subsystem to a console rather than windows.
+#
+# Note: enabling this feature will cause a cmd window to appear if the app is
+# opened double-clicking.
+stdio= []
+
 [dependencies]
 geoms = { version = "0.0.1", features = ["win32"] }
 skylight = { path = "../" }
