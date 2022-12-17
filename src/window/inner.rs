@@ -1,6 +1,6 @@
 use crate::{
     errors::{self, Context, Result},
-    input::keyboard::{Adapter as KbdAdapter, Keyboard},
+    input::keyboard::{KeyEvent, Keyboard},
     types::*,
     window::{Theme, WindowClass, WindowsProcessMessage, DPI},
 };
@@ -263,8 +263,8 @@ impl WindowInner {
     fn handle_message(&self, msg: WindowsProcessMessage) -> bool {
         ::tracing::trace!(%msg);
 
-        if KbdAdapter::handles_msg(msg) {
-            if let Some(event) = KbdAdapter::adapt(msg) {
+        if KeyEvent::is_key_event(msg) {
+            if let Some(event) = KeyEvent::new(msg) {
                 self.keyboard.write().process_evt(event);
             }
             return true;

@@ -5,7 +5,7 @@ use ::std::{char::REPLACEMENT_CHARACTER, collections::VecDeque};
 use ::tracing::trace;
 use ::widestring::WideChar;
 
-use super::{KeyCode, KeystrokeFlags};
+use super::{KeyCode, KeyEvent};
 
 /// Length of the input queue, after which point the earliest characters are
 /// dropped.
@@ -37,24 +37,6 @@ where
     pub fn chars(&mut self) -> &mut I {
         &mut self.chars
     }
-}
-
-/// A representation of a Win32 virtual key event. These are purely internal and
-/// are consumed by the `Keyboard` type.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum KeyEvent {
-    KeyDown {
-        key_code: KeyCode,
-        flags: KeystrokeFlags,
-    },
-    KeyUp {
-        key_code: KeyCode,
-        flags: KeystrokeFlags,
-    },
-    Input {
-        wchar: WideChar,
-        flags: KeystrokeFlags,
-    },
 }
 
 /// A simple abstraction over keyboard input to help track pressed keys and a
@@ -190,84 +172,228 @@ impl Keyboard {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{input::keyboard::KeystrokeFlags, window::WindowsProcessMessage};
 
     use ::std::ops::Not;
     use ::strum::IntoEnumIterator;
     use ::widestring::u16str;
-    use ::windows::Win32::{
-        Foundation::{LPARAM, WPARAM},
-        UI::WindowsAndMessaging::*,
-    };
+    use ::windows::Win32::UI::WindowsAndMessaging::*;
 
     mod event_samples {
         use super::*;
 
-        /// An event sampled from winproc messages.
-        /// .0 = winproc umsg
-        /// .1 = winproc WPARAM
-        /// .2 = winproc LPARAM
-        pub type EventSample = (u32, usize, isize);
-
         /// Press and release "a" character.
-        pub const PRESS_RELEASE_A: &[EventSample] = &[
-            (WM_KEYDOWN, 0x41, 0x000001E0001),
-            (WM_CHAR, 0x61, 0x000001E0001),
-            (WM_KEYUP, 0x41, 0x000C01E0001),
+        pub const PRESS_RELEASE_A: &[WindowsProcessMessage] = &[
+            WindowsProcessMessage {
+                umsg: WM_KEYDOWN,
+                wparam: 0x41,
+                lparam: 0x000001E0001,
+            },
+            WindowsProcessMessage {
+                umsg: WM_CHAR,
+                wparam: 0x61,
+                lparam: 0x000001E0001,
+            },
+            WindowsProcessMessage {
+                umsg: WM_KEYUP,
+                wparam: 0x41,
+                lparam: 0x000C01E0001,
+            },
         ];
 
         /// Press and release "b" character.
-        pub const PRESS_RELEASE_B: &[EventSample] = &[
-            (WM_KEYDOWN, 0x42, 0x00000300001),
-            (WM_CHAR, 0x62, 0x00000300001),
-            (WM_KEYUP, 0x42, 0x000C0300001),
+        pub const PRESS_RELEASE_B: &[WindowsProcessMessage] = &[
+            WindowsProcessMessage {
+                umsg: WM_KEYDOWN,
+                wparam: 0x42,
+                lparam: 0x00000300001,
+            },
+            WindowsProcessMessage {
+                umsg: WM_CHAR,
+                wparam: 0x62,
+                lparam: 0x00000300001,
+            },
+            WindowsProcessMessage {
+                umsg: WM_KEYUP,
+                wparam: 0x42,
+                lparam: 0x000C0300001,
+            },
         ];
 
         /// Press and release "c" character.
-        pub const PRESS_RELEASE_C: &[EventSample] = &[
-            (WM_KEYDOWN, 0x43, 0x000002E0001),
-            (WM_CHAR, 0x63, 0x000002E0001),
-            (WM_KEYUP, 0x43, 0x000C02E0001),
+        pub const PRESS_RELEASE_C: &[WindowsProcessMessage] = &[
+            WindowsProcessMessage {
+                umsg: WM_KEYDOWN,
+                wparam: 0x43,
+                lparam: 0x000002E0001,
+            },
+            WindowsProcessMessage {
+                umsg: WM_CHAR,
+                wparam: 0x63,
+                lparam: 0x000002E0001,
+            },
+            WindowsProcessMessage {
+                umsg: WM_KEYUP,
+                wparam: 0x43,
+                lparam: 0x000C02E0001,
+            },
         ];
 
         /// Press and release "backspace" key.
-        pub const PRESS_RELEASE_BACKSPACE: &[EventSample] = &[
-            (WM_KEYDOWN, 0x8, 0x000000E0001),
-            (WM_CHAR, 0x8, 0x000000E0001),
-            (WM_KEYUP, 0x8, 0x000C00E0001),
+        pub const PRESS_RELEASE_BACKSPACE: &[WindowsProcessMessage] = &[
+            WindowsProcessMessage {
+                umsg: WM_KEYDOWN,
+                wparam: 0x8,
+                lparam: 0x000000E0001,
+            },
+            WindowsProcessMessage {
+                umsg: WM_CHAR,
+                wparam: 0x8,
+                lparam: 0x000000E0001,
+            },
+            WindowsProcessMessage {
+                umsg: WM_KEYUP,
+                wparam: 0x8,
+                lparam: 0x000C00E0001,
+            },
         ];
 
         /// Text entry for 'ö' ('"' + 'o' combo on international keyboard).
-        pub const PRESS_RELEASE_INTERNATIONAL_UMLAUT: &[EventSample] = &[
-            (WM_KEYDOWN, 0x10, 0x002A0001),
-            (WM_KEYDOWN, 0xDE, 0x00280001),
-            (WM_DEADCHAR, 0x22, 0x00280001),
-            (WM_KEYUP, 0xDE, 0xC0280001),
-            (WM_KEYUP, 0x10, 0xC02A0001),
-            (WM_KEYDOWN, 0x4F, 0x00180001),
-            (WM_CHAR, 0xF6, 0x00180001),
-            (WM_KEYUP, 0x4F, 0xC0180001),
+        pub const PRESS_RELEASE_INTERNATIONAL_UMLAUT: &[WindowsProcessMessage] = &[
+            WindowsProcessMessage {
+                umsg: WM_KEYDOWN,
+                wparam: 0x10,
+                lparam: 0x002A0001,
+            },
+            WindowsProcessMessage {
+                umsg: WM_KEYDOWN,
+                wparam: 0xDE,
+                lparam: 0x00280001,
+            },
+            WindowsProcessMessage {
+                umsg: WM_DEADCHAR,
+                wparam: 0x22,
+                lparam: 0x00280001,
+            },
+            WindowsProcessMessage {
+                umsg: WM_KEYUP,
+                wparam: 0xDE,
+                lparam: 0xC0280001,
+            },
+            WindowsProcessMessage {
+                umsg: WM_KEYUP,
+                wparam: 0x10,
+                lparam: 0xC02A0001,
+            },
+            WindowsProcessMessage {
+                umsg: WM_KEYDOWN,
+                wparam: 0x4F,
+                lparam: 0x00180001,
+            },
+            WindowsProcessMessage {
+                umsg: WM_CHAR,
+                wparam: 0xF6,
+                lparam: 0x00180001,
+            },
+            WindowsProcessMessage {
+                umsg: WM_KEYUP,
+                wparam: 0x4F,
+                lparam: 0xC0180001,
+            },
         ];
 
         /// Emoji input for 👌 using emoji keyboard ("win-.")
-        pub const EMOJI_INPUT_OK_HAND: &[EventSample] = &[
-            (WM_IME_REQUEST, 0x0006, 0x643E50BC90),
-            (WM_GETICON, 0x0000, 0x0000000078),
-            (WM_KEYDOWN, 0x005B, 0x00015B0001),
-            (WM_KEYUP, 0x00BE, 0x0080340001),
-            (WM_KEYUP, 0x005B, 0x00C15B0001),
-            (WM_IME_STARTCOMPOSITION, 0x0000, 0x0000000000),
-            (WM_IME_NOTIFY, 0x000F, 0x0020600A01),
-            (WM_IME_NOTIFY, 0x000F, 0x0020600A01),
-            (WM_IME_KEYLAST, 0xD83D, 0x0000000800),
-            (WM_IME_CHAR, 0xD83D, 0x0000000001),
-            (WM_IME_CHAR, 0xDC4C, 0x0000000001),
-            (WM_IME_NOTIFY, 0x010D, 0x0000000000),
-            (WM_IME_ENDCOMPOSITION, 0x0000, 0x0000000000),
-            (WM_IME_NOTIFY, 0x010E, 0x0000000000),
-            (WM_CHAR, 0xD83D, 0x0000000001),
-            (WM_CHAR, 0xDC4C, 0x0000000001),
-            (0xC052, 0x0001, 0x643E50D570), // Unknown message
-            (WM_IME_REQUEST, 0x0006, 0x643E50D570),
+        pub const EMOJI_INPUT_OK_HAND: &[WindowsProcessMessage] = &[
+            WindowsProcessMessage {
+                umsg: WM_IME_REQUEST,
+                wparam: 0x0006,
+                lparam: 0x643E50BC90,
+            },
+            WindowsProcessMessage {
+                umsg: WM_GETICON,
+                wparam: 0x0000,
+                lparam: 0x0000000078,
+            },
+            WindowsProcessMessage {
+                umsg: WM_KEYDOWN,
+                wparam: 0x005B,
+                lparam: 0x00015B0001,
+            },
+            WindowsProcessMessage {
+                umsg: WM_KEYUP,
+                wparam: 0x00BE,
+                lparam: 0x0080340001,
+            },
+            WindowsProcessMessage {
+                umsg: WM_KEYUP,
+                wparam: 0x005B,
+                lparam: 0x00C15B0001,
+            },
+            WindowsProcessMessage {
+                umsg: WM_IME_STARTCOMPOSITION,
+                wparam: 0x0000,
+                lparam: 0x0000000000,
+            },
+            WindowsProcessMessage {
+                umsg: WM_IME_NOTIFY,
+                wparam: 0x000F,
+                lparam: 0x0020600A01,
+            },
+            WindowsProcessMessage {
+                umsg: WM_IME_NOTIFY,
+                wparam: 0x000F,
+                lparam: 0x0020600A01,
+            },
+            WindowsProcessMessage {
+                umsg: WM_IME_KEYLAST,
+                wparam: 0xD83D,
+                lparam: 0x0000000800,
+            },
+            WindowsProcessMessage {
+                umsg: WM_IME_CHAR,
+                wparam: 0xD83D,
+                lparam: 0x0000000001,
+            },
+            WindowsProcessMessage {
+                umsg: WM_IME_CHAR,
+                wparam: 0xDC4C,
+                lparam: 0x0000000001,
+            },
+            WindowsProcessMessage {
+                umsg: WM_IME_NOTIFY,
+                wparam: 0x010D,
+                lparam: 0x0000000000,
+            },
+            WindowsProcessMessage {
+                umsg: WM_IME_ENDCOMPOSITION,
+                wparam: 0x0000,
+                lparam: 0x0000000000,
+            },
+            WindowsProcessMessage {
+                umsg: WM_IME_NOTIFY,
+                wparam: 0x010E,
+                lparam: 0x0000000000,
+            },
+            WindowsProcessMessage {
+                umsg: WM_CHAR,
+                wparam: 0xD83D,
+                lparam: 0x0000000001,
+            },
+            WindowsProcessMessage {
+                umsg: WM_CHAR,
+                wparam: 0xDC4C,
+                lparam: 0x0000000001,
+            },
+            WindowsProcessMessage {
+                umsg: 0xC052,
+                wparam: 0x0001,
+                lparam: 0x643E50D570,
+            }, // Unknown message
+            WindowsProcessMessage {
+                umsg: WM_IME_REQUEST,
+                wparam: 0x0006,
+                lparam: 0x643E50D570,
+            },
         ];
     }
 
@@ -560,11 +686,10 @@ mod tests {
     /// Events were captured via debugging utils.
     #[test]
     fn test_input_queue_international_input() {
-        use super::super::Adapter;
         let mut kbd = Keyboard::new();
 
-        for &(umsg, wparam, lparam) in event_samples::PRESS_RELEASE_INTERNATIONAL_UMLAUT {
-            if let Some(evt) = Adapter::adapt(umsg, WPARAM(wparam), LPARAM(lparam)) {
+        for &msg in event_samples::PRESS_RELEASE_INTERNATIONAL_UMLAUT {
+            if let Some(evt) = KeyEvent::new(msg) {
                 kbd.process_evt(evt);
             }
         }
@@ -584,11 +709,10 @@ mod tests {
     /// Events captured using debug utils.
     #[test]
     fn test_input_queue_emoji() {
-        use super::super::Adapter;
         let mut kbd = Keyboard::new();
 
-        for &(umsg, wparam, lparam) in event_samples::EMOJI_INPUT_OK_HAND {
-            if let Some(evt) = Adapter::adapt(umsg, WPARAM(wparam), LPARAM(lparam)) {
+        for &msg in event_samples::EMOJI_INPUT_OK_HAND {
+            if let Some(evt) = KeyEvent::new(msg) {
                 println!("{evt:#?}");
                 kbd.process_evt(evt);
             }
@@ -610,10 +734,9 @@ mod tests {
     /// some input should result in pending input being removed.
     #[test]
     fn test_backspace_key() {
-        use super::super::Adapter;
         let mut kbd = Keyboard::new();
 
-        for &(umsg, wparam, lparam) in [
+        for &msg in [
             event_samples::PRESS_RELEASE_BACKSPACE,
             event_samples::PRESS_RELEASE_BACKSPACE,
             event_samples::PRESS_RELEASE_A,
@@ -624,7 +747,7 @@ mod tests {
         .into_iter()
         .flatten()
         {
-            if let Some(evt) = Adapter::adapt(umsg, WPARAM(wparam), LPARAM(lparam)) {
+            if let Some(evt) = KeyEvent::new(msg) {
                 kbd.process_evt(evt);
             }
         }

@@ -2,18 +2,78 @@
 //! counterparts.
 
 use ::deku::prelude::*;
+use ::widestring::WideChar;
 use ::windows::Win32::{
     Foundation::LPARAM,
     UI::WindowsAndMessaging::{WM_CHAR, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP},
 };
 
-use crate::{
-    input::keyboard::{KeyCode, KeyEvent},
-    window::WindowsProcessMessage,
-};
+use crate::{input::keyboard::KeyCode, window::WindowsProcessMessage};
 
-/// Win32 Keystroke message flags as defined here:
-/// https://learn.microsoft.com/en-us/windows/win32/inputdev/about-keyboard-input#keystroke-message-flags
+/// A representation of a Win32 virtual key event. These are purely internal and
+/// are consumed by the `Keyboard` type.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum KeyEvent {
+    KeyDown {
+        key_code: KeyCode,
+        flags: KeystrokeFlags,
+    },
+    KeyUp {
+        key_code: KeyCode,
+        flags: KeystrokeFlags,
+    },
+    Input {
+        wchar: WideChar,
+        flags: KeystrokeFlags,
+    },
+}
+
+impl KeyEvent {
+    /// Indicates whether the given [`WindowsProcessMessage`] is a key event.
+    ///
+    /// If the message contains a key event, it can be converted into
+    /// [`KeyEvent`].
+    pub(crate) const fn is_key_event(msg: WindowsProcessMessage) -> bool {
+        matches!(
+            msg.identifier(),
+            WM_KEYDOWN | WM_SYSKEYDOWN | WM_KEYUP | WM_SYSKEYUP | WM_CHAR
+        )
+    }
+
+    /// Adapts a Windows process message into a [KeyEvent]. This function should
+    /// only be called if [handles_msg] indicated that the [Adapter] will handle
+    /// a wnd proc message with these parameters.
+    pub(crate) fn new(msg: WindowsProcessMessage) -> Option<Self> {
+        match msg.identifier() {
+            WM_KEYDOWN | WM_SYSKEYDOWN => {
+                KeyCode::try_from(msg.wparam())
+                    .ok()
+                    .map(|key_code| Self::KeyDown {
+                        key_code,
+                        flags: msg.lparam().into(),
+                    })
+            }
+            WM_KEYUP | WM_SYSKEYUP => {
+                KeyCode::try_from(msg.wparam())
+                    .ok()
+                    .map(|key_code| Self::KeyUp {
+                        key_code,
+                        flags: msg.lparam().into(),
+                    })
+            }
+            WM_CHAR => Some(Self::Input {
+                wchar: msg.wparam() as u16,
+                flags: msg.lparam().into(),
+            }),
+            _ => None,
+        }
+    }
+}
+
+/// Struct representation of the Win32 keystroke message flags.
+///
+/// Message flag bitfield definition:
+/// <https://learn.microsoft.com/en-us/windows/win32/inputdev/about-keyboard-input#keystroke-message-flags>
 #[derive(Clone, Copy, Debug, PartialEq, Eq, DekuRead, DekuWrite)]
 #[deku(endian = "big")]
 pub(crate) struct KeystrokeFlags {
@@ -69,49 +129,6 @@ impl From<isize> for KeystrokeFlags {
     }
 }
 
-pub(crate) struct Adapter {}
-
-impl Adapter {
-    /// Indicates whether the [Adapter] handles the given message. If it does,
-    /// [adapt] should be called and the message should be considered handled
-    /// regardless of whether a [KeyEvent] is generated.
-    pub(crate) const fn handles_msg(msg: WindowsProcessMessage) -> bool {
-        matches!(
-            msg.identifier(),
-            WM_KEYDOWN | WM_SYSKEYDOWN | WM_KEYUP | WM_SYSKEYUP | WM_CHAR
-        )
-    }
-
-    /// Adapts a Windows process message into a [KeyEvent]. This function should
-    /// only be called if [handles_msg] indicated that the [Adapter] will handle
-    /// a wnd proc message with these parameters.
-    pub(crate) fn adapt(msg: WindowsProcessMessage) -> Option<KeyEvent> {
-        match msg.identifier() {
-            WM_KEYDOWN | WM_SYSKEYDOWN => {
-                KeyCode::try_from(msg.wparam())
-                    .ok()
-                    .map(|key_code| KeyEvent::KeyDown {
-                        key_code,
-                        flags: msg.lparam().into(),
-                    })
-            }
-            WM_KEYUP | WM_SYSKEYUP => {
-                KeyCode::try_from(msg.wparam())
-                    .ok()
-                    .map(|key_code| KeyEvent::KeyUp {
-                        key_code,
-                        flags: msg.lparam().into(),
-                    })
-            }
-            WM_CHAR => Some(KeyEvent::Input {
-                wchar: msg.wparam() as u16,
-                flags: msg.lparam().into(),
-            }),
-            _ => None,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -122,7 +139,12 @@ mod tests {
     #[test]
     fn test_key_down() {
         // Event captured via `debug::DebugMsg` dump.
-        let event = Adapter::adapt(WM_KEYDOWN, WPARAM(0x48), LPARAM(0x230001)).unwrap();
+        let event = KeyEvent::new(WindowsProcessMessage {
+            umsg: WM_KEYDOWN,
+            wparam: 0x48,
+            lparam: 0x230001,
+        })
+        .unwrap();
 
         assert_eq!(
             event,
@@ -144,7 +166,12 @@ mod tests {
     #[test]
     fn test_char_event() {
         // Event captured via `debug::DebugMsg` dump.
-        let event = Adapter::adapt(WM_CHAR, WPARAM(0x68), LPARAM(0x230001)).unwrap();
+        let event = KeyEvent::new(WindowsProcessMessage {
+            umsg: WM_CHAR,
+            wparam: 0x68,
+            lparam: 0x230001,
+        })
+        .unwrap();
 
         assert_eq!(
             event,
@@ -166,8 +193,12 @@ mod tests {
     #[test]
     fn test_key_up() {
         // Event captured via `debug::DebugMsg` dump.
-        let event = Adapter::adapt(WM_KEYUP, WPARAM(0x48), LPARAM(0xC0230001))
-            .expect("Valid KEYDOWN event should be parsed");
+        let event = KeyEvent::new(WindowsProcessMessage {
+            umsg: WM_KEYUP,
+            wparam: 0x48,
+            lparam: 0xC0230001,
+        })
+        .expect("Valid KEYDOWN event should be parsed");
 
         assert_eq!(
             event,
@@ -189,7 +220,12 @@ mod tests {
     #[test]
     fn test_key_down_with_modifier() {
         // Event captured via `debug::DebugMsg` dump.
-        let event = Adapter::adapt(WM_SYSKEYDOWN, WPARAM(0x48), LPARAM(0x20230001)).unwrap();
+        let event = KeyEvent::new(WindowsProcessMessage {
+            umsg: WM_SYSKEYDOWN,
+            wparam: 0x48,
+            lparam: 0x20230001,
+        })
+        .unwrap();
 
         assert_eq!(
             event,
@@ -211,7 +247,12 @@ mod tests {
     #[test]
     fn test_key_up_with_modifiers() {
         // Event captured via `debug::DebugMsg` dump.
-        let event = Adapter::adapt(WM_SYSKEYUP, WPARAM(0x48), LPARAM(0xE0230001)).unwrap();
+        let event = KeyEvent::new(WindowsProcessMessage {
+            umsg: WM_SYSKEYUP,
+            wparam: 0x48,
+            lparam: 0xE0230001,
+        })
+        .unwrap();
 
         assert_eq!(
             event,
@@ -233,7 +274,12 @@ mod tests {
     #[test]
     fn test_key_down_with_repeat() {
         // Event captured via `debug::DebugMsg` dump.
-        let event = Adapter::adapt(WM_KEYDOWN, WPARAM(0x48), LPARAM(0x40230001)).unwrap();
+        let event = KeyEvent::new(WindowsProcessMessage {
+            umsg: WM_KEYDOWN,
+            wparam: 0x48,
+            lparam: 0x40230001,
+        })
+        .unwrap();
 
         assert_eq!(
             event,

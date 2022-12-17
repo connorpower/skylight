@@ -24,7 +24,7 @@ use ::windows::Win32::Foundation::{LPARAM, WPARAM};
 /// ### Usage
 ///
 /// ```
-/// use ::windows::Win32::Foundation::{LPARAM, WPARAM};
+/// use ::windows::Win32::Foundation::HWND;
 /// use ::skylight::window::WindowsProcessMessage;
 ///
 /// fn wnd_proc(hwnd: HWND, msg: WindowsProcessMessage) {
@@ -37,9 +37,9 @@ use ::windows::Win32::Foundation::{LPARAM, WPARAM};
 /// [`Display`]: std::fmt::Display
 #[derive(Clone, Copy, Debug)]
 pub struct WindowsProcessMessage {
-    umsg: u32,
-    wparam: usize,
-    lparam: isize,
+    pub(crate) umsg: u32,
+    pub(crate) wparam: usize,
+    pub(crate) lparam: isize,
 }
 
 impl WindowsProcessMessage {
@@ -69,13 +69,13 @@ impl WindowsProcessMessage {
     ///
     /// ```
     /// use ::windows::Win32::Foundation::{LPARAM, WPARAM};
-    /// use ::skylight::windows::WindowsProcessMessage;
+    /// use ::skylight::window::WindowsProcessMessage;
     ///
     /// let umsg = 0x0047; // WM_WINDOWPOSCHANGED;
     /// let wparam = WPARAM(0x0000000000000000);
     /// let lparam = LPARAM(0x000000862299DF10);
     ///
-    /// println!("{}", DebugMsg::new(umsg, wparam, lparam));
+    /// println!("{}", WindowsProcessMessage::new(umsg, wparam, lparam));
     /// ```
     pub fn new(umsg: u32, wparam: WPARAM, lparam: LPARAM) -> Self {
         Self {

@@ -1,3 +1,3 @@
-//! Input handling & state tracking (keyboard and mouse).
+//! Input handling & state tracking for keyboard and mouse events.
 
 pub mod keyboard;
