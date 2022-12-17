@@ -102,8 +102,9 @@ impl WindowInner {
                     WS_OVERLAPPEDWINDOW,
                     CW_USEDEFAULT,
                     CW_USEDEFAULT,
-                    // 0 pixel width/height: show window as hidden first so we
-                    // can detect the monitor's DPI:
+                    // 0 pixel width and height. We show window as hidden first
+                    // so we can first detect the monitor's DPI and request an
+                    // appropriate scaled size.
                     0,
                     0,
                     None,
