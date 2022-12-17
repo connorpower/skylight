@@ -261,7 +261,7 @@ impl WindowInner {
     /// handled, or was only intercepted/tapped on the way though and should
     /// still be forwarded to the default procedure.
     fn handle_message(&self, umsg: u32, wparam: WPARAM, lparam: LPARAM) -> bool {
-        ::tracing::trace!(msg = %crate::debug::msgs::DebugMsg::new(umsg, wparam, lparam));
+        ::tracing::trace!(msg = %crate::debug::DebugMsg::new(umsg, wparam, lparam));
 
         if KbdAdapter::handles_msg(umsg, wparam, lparam) {
             if let Some(event) = KbdAdapter::adapt(umsg, wparam, lparam) {
