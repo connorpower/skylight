@@ -117,11 +117,12 @@
 //!                      └──────────────────────────────────────────────┘
 //! ```
 
+mod builder;
 pub(crate) mod class;
 mod dpi;
 pub(crate) mod inner;
 mod wnd;
-
+pub use builder::*;
 use class::*;
 pub use dpi::*;
 use inner::*;

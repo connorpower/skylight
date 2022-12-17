@@ -3,7 +3,7 @@
 use ::geoms::d2::Size2D;
 use ::skylight::{
     types::ResourceId,
-    window::{Theme, Window},
+    window::{Builder, Theme},
 };
 use ::windows::Win32::UI::WindowsAndMessaging::{
     DispatchMessageW, GetMessageW, PostQuitMessage, TranslateMessage, MSG,
@@ -11,16 +11,16 @@ use ::windows::Win32::UI::WindowsAndMessaging::{
 
 pub fn main() {
     // Build and display a new window.
-    let mut main_window = Window::new(
-        Size2D {
+    let mut main_window = Builder::new()
+        .with_size(Size2D {
             width: 720,
             height: 640,
-        },
-        "Hello, Redmond!",
-        Some(ResourceId(1)),
-        Theme::DarkMode,
-    )
-    .expect("Failed to create main window");
+        })
+        .with_title("Hello, Redmond!")
+        .with_icon(ResourceId(1))
+        .with_theme(Theme::DarkMode)
+        .build()
+        .expect("Failed to create main window");
 
     // Pump our Win32 message loop. The window will automatically handle most
     // aspects, we just need to test for any pending close or paint requests

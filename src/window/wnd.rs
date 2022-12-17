@@ -24,22 +24,16 @@ use ::windows::{
 /// # Example
 ///
 /// ```no_run
-/// use ::skylight::window::{Window, Theme};
+/// use ::skylight::window::{Window, Theme, Builder};
 /// use ::windows::Win32::UI::WindowsAndMessaging::{
 ///     DispatchMessageW, GetMessageW, PostQuitMessage, TranslateMessage, MSG,
 /// };
-/// use ::geoms::d2::Size2D;
 ///
-/// let mut window = Window::new(
-///     Size2D {
-///         width: 720,
-///         height: 640,
-///     },
-///     "Hello, Redmond!",
-///     None,
-///     Theme::DarkMode,
-/// )
-/// .expect("Failed to create main window");
+/// let mut window = Builder::new()
+///     .with_title("Hello, Redmond!")
+///     .with_theme(Theme::DarkMode)
+///     .build()
+///     .expect("Failed to create main window");
 ///
 /// // Handle requests in the message loop
 /// let mut msg = MSG::default();
@@ -117,18 +111,8 @@ impl Window {
     /// # Example
     ///
     /// ```no_run
-    /// use ::skylight::window::{Window, Theme};
-    /// # use ::geoms::d2::Size2D;
-    /// # let mut window = Window::new(
-    /// #     Size2D {
-    /// #         width: 720,
-    /// #         height: 640,
-    /// #     },
-    /// #     "Hello, Redmond!",
-    /// #     None,
-    /// #     Theme::DarkMode,
-    /// # )
-    /// # .expect("Failed to create main window");
+    /// use ::skylight::window::{Window, Theme, Builder};
+    /// # let mut window = Builder::new().build().unwrap();
     ///
     /// // Typically invoked within the core message loop:
     /// if window.is_requesting_close() {
@@ -137,7 +121,7 @@ impl Window {
     ///     // or simply ignore the request.
     /// }
     /// ```
-    pub fn is_requesting_close(&mut self) -> bool {
+    pub fn is_requesting_close(&self) -> bool {
         self.inner.is_requesting_close()
     }
 
@@ -151,18 +135,8 @@ impl Window {
     /// # Example
     ///
     /// ```no_run
-    /// use ::skylight::window::{Window, Theme};
-    /// # use ::geoms::d2::Size2D;
-    /// # let mut window = Window::new(
-    /// #     Size2D {
-    /// #         width: 720,
-    /// #         height: 640,
-    /// #     },
-    /// #     "Hello, Redmond!",
-    /// #     None,
-    /// #     Theme::DarkMode,
-    /// # )
-    /// # .expect("Failed to create main window");
+    /// use ::skylight::window::{Window, Theme, Builder};
+    /// # let mut window = Builder::new().build().unwrap();
     ///
     /// // Typically invoked within the core message loop:
     /// if window.is_requesting_close() {
@@ -171,7 +145,7 @@ impl Window {
     ///     // or simply ignore the request.
     /// }
     /// ```
-    pub fn clear_close_request(&mut self) {
+    pub fn clear_close_request(&self) {
         self.inner.clear_close_request();
     }
 
@@ -184,18 +158,8 @@ impl Window {
     /// # Example
     ///
     /// ```no_run
-    /// use ::skylight::window::{Window, Theme};
-    /// # use ::geoms::d2::Size2D;
-    /// # let mut window = Window::new(
-    /// #     Size2D {
-    /// #         width: 720,
-    /// #         height: 640,
-    /// #     },
-    /// #     "Hello, Redmond!",
-    /// #     None,
-    /// #     Theme::DarkMode,
-    /// # )
-    /// # .expect("Failed to create main window");
+    /// use ::skylight::window::{Window, Theme, Builder};
+    /// # let mut window = Builder::new().build().unwrap();
     ///
     /// // Typically invoked within the core message loop:
     /// if window.is_requesting_paint() {
@@ -203,7 +167,7 @@ impl Window {
     ///     // paint as needed (Direct2D, Direct3D, GDI, etc.)
     /// }
     /// ```
-    pub fn is_requesting_paint(&mut self) -> bool {
+    pub fn is_requesting_paint(&self) -> bool {
         self.inner.is_requesting_paint()
     }
 
@@ -215,25 +179,15 @@ impl Window {
     /// # Example
     ///
     /// ```no_run
-    /// use ::skylight::window::{Window, Theme};
-    /// # use ::geoms::d2::Size2D;
-    /// # let mut window = Window::new(
-    /// #     Size2D {
-    /// #         width: 720,
-    /// #         height: 640,
-    /// #     },
-    /// #     "Hello, Redmond!",
-    /// #     None,
-    /// #     Theme::DarkMode,
-    /// # )
-    /// # .expect("Failed to create main window");
+    /// use ::skylight::window::{Window, Theme, Builder};
+    /// # let mut window = Builder::new().build().unwrap();
     ///
     /// // Typically invoked within the core message loop:
     /// if window.is_requesting_paint() {
     ///     window.clear_paint_request();
     ///     // paint as needed (Direct2D, Direct3D, GDI, etc.)
     /// }
-    pub fn clear_paint_request(&mut self) {
+    pub fn clear_paint_request(&self) {
         self.inner.clear_paint_request();
     }
 
