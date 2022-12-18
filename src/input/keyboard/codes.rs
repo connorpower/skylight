@@ -1,10 +1,20 @@
-//! Win32 virtual key codes.
+//! An exhaustive list of Win32 virtual key codes.
 
-/// Key codes for key-pressed and key-released events. These are not the same as
-/// the unicode characters which result from keyboard entry, and should
-/// therefore not be used for text input but instead for simple key
-/// pressed/released tracking (useful for instance if using the keyboard to
-/// control a game).
+/// Virtual Key codes which identify physical keys on a keyboard, in addition to
+/// some virtual keys such as mouse buttons.
+///
+/// Virtual key codes are not the same as the unicode characters which result
+/// from keyboard entry. These key codes tell you which physical button was
+/// pressed, but should not be used for text input. Virtual key codes are mostly
+/// only useful for simple key pressed/released tracking.
+///
+/// For keyboard state tracking and text input, the [`Keyboard`] object should
+/// be used. Every [`Window`] has an associated [`Keyboard`] which can be
+/// retrieved via [`Window::keyboard()`].
+///
+/// [`Keyboard`]: crate::input::keyboard::Keyboard
+/// [`Window`]: crate::window::Window
+/// [`Window::keyboard()`]: crate::window::Window::keyboard
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ::strum::EnumIter)]
 pub enum KeyCode {

@@ -7,40 +7,91 @@ use ::widestring::WideChar;
 
 use super::{KeyCode, KeyEvent};
 
-/// Length of the input queue, after which point the earliest characters are
-/// dropped.
-const INPUT_QUEUE_CAPACITY: usize = 32;
+/// Length of the [`Keyboard`] input queue, after which point the earliest
+/// characters are dropped (FIFO).
+pub const INPUT_QUEUE_CAPACITY: usize = 32;
 
 const BACKSPACE: char = '\x08';
 
-/// An object which encapsulates the state of the input buffer.
-pub struct InputBuffer<I>
-where
-    I: ExactSizeIterator<Item = char>,
-{
-    chars: I,
-    n_backspaces: usize,
-}
-
-impl<I> InputBuffer<I>
-where
-    I: ExactSizeIterator<Item = char>,
-{
-    /// The number of backspaces which preceded any text in the [Self::chars]
-    /// buffer and should be removed from to any _previously_ drained input.
-    pub fn num_backspaces(&self) -> usize {
-        self.n_backspaces
-    }
-
-    /// The current input buffer. Any backspace events which happened within
-    /// the buffer have already been applied to the buffer contents.
-    pub fn chars(&mut self) -> &mut I {
-        &mut self.chars
-    }
-}
-
-/// A simple abstraction over keyboard input to help track pressed keys and a
-/// queue of text input.
+/// The central object which tracks and manages keyboard state and text input.
+///
+/// # Key Pressed Tracking
+///
+/// Windows communicates keyboard changes by sending messages to process. This
+/// can make handling keyboard state difficult as the events must be processed
+/// immediately, or otherwise stored. Most applications aren't prepared to
+/// handle the key events immediately as they come in. For instance, a typical
+/// game loop has a well-defined location in an update loop where key state is
+/// looked at and appropriate actions are taken for the next render loop. This
+/// task is made difficult without persistent keyboard state.
+///
+/// Keeping track of these messages and maintaining a persistent view of which
+/// keys are in which state is one of the primary tasks for the [`Keyboard`]
+/// object. The application is free to ask [`Keyboard`] for the state of a key
+/// at any time. Windows process events are handled opaquely in the background
+/// to keep the [`Keyboard`] state constantly up to date.
+///
+/// # Text Input
+///
+/// Similar to key pressed state, text input is also communicated by Windows by
+/// sending messages to the process.  Much the same problems occur - it's not
+/// always convenient to handle these messages _immediately_ as they arrive.
+/// Often, components would prefer to look at the input buffer during their own
+/// update cycles.
+///
+/// Text input does not have a 1:1 relationship to the virtual key events that
+/// indicate which keys are pressed. Keyboard layouts and languages might mean
+/// that the same physical key corresponds to different text input.
+/// International input modes allow sequences of keys to input a single
+/// character (often with umlaut, accent, or other modifier) which means there
+/// is no direct relationship between key pressed and input text. Lastly,
+/// alternative input modes are supported such as the emoji or special character
+/// keyboard, or the lesser known manual hex-code input (which if raw events
+/// were observed, would look like alt-key, plus-key, and a series of
+/// hexadecimal characters).
+///
+/// Text input is further complicated by modern unicode. The Windows process
+/// messages may send UTF-16 surrogate pairs which are invalid on their own,
+/// necessitating that they be stored somewhere as pending until the
+/// corresponding low surrogate arrives.
+///
+/// Lastly, Windows deals natively with UTF-16 and makes no guarantee about
+/// unicode validity. Rust strings operate on UTF-8 and require valid unicode
+/// and will panic otherwise. It's therefore relatively dangerous to naively
+/// interact with Windows strings.
+///
+/// The [`Keyboard`] object solves each of these problems by maintaining an
+/// input queue for text input. The input queue stores text input until it is
+/// explicitly drained by a caller. Draining the input queue yields an iterator
+/// over valid UTF-8 rust characters. UTF-16 surrogates are handled internally,
+/// and not added to the queue until both upper and lower pairs have arrived.
+/// Invalid unicode is converted into the unicode unknown character.
+///
+/// # Example
+///
+/// ```
+/// use ::skylight::input::keyboard::{Keyboard, KeyCode};
+///
+/// # struct Window {};
+/// # impl Window {
+/// #     fn keyboard(&self) -> Keyboard { Keyboard::new() }
+/// # }
+/// # let window = Window {};
+/// // let window = some window...
+///
+/// // Retrieve the keyboard for a given window.
+/// let mut keyboard = window.keyboard();
+///
+/// // Test the state of a particular virtual key.
+/// assert!(!keyboard.is_key_pressed(KeyCode::Left));
+///
+/// // Drain and collect any pending input. The keyboard input is unicode
+/// // compatible and always returns valid unicode chars.
+/// let input: String = keyboard.drain_input().chars().collect();
+/// assert_ne!(&input, "👌");
+/// ```
+///
+/// [`Window`]: crate::window::Window
 pub struct Keyboard {
     /// Bitfield which tracks the press state for the keyboard keys.
     pressed: BitArr!(for 255, in usize, Lsb0),
@@ -57,8 +108,27 @@ pub struct Keyboard {
     pending_surrogate: Option<WideChar>,
 }
 
+impl Default for Keyboard {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Keyboard {
-    pub(crate) fn new() -> Self {
+    /// Constructs a new keyboard.
+    ///
+    /// <p style="background:rgba(255,181,77,0.16);padding:0.75em;">
+    /// <strong>Warning:</strong> This API is for advanced use only.
+    /// </p>
+    ///
+    /// You should not usually manually construct a [`Keyboard`] but rather
+    /// retrieve the [`Keyboard`] instance for a given [`Window`] via
+    /// [`Window::keyboard`].  This constructor is public only for advanced
+    /// uses, or to enable unit testing in your own app.
+    ///
+    /// [`Window`]: crate::window::Window
+    /// [`Window::keyboard`]: crate::window::Window::keyboard
+    pub fn new() -> Self {
         Self {
             pressed: bitarr![usize, Lsb0; 0; 255],
             input_queue: VecDeque::with_capacity(INPUT_QUEUE_CAPACITY),
@@ -67,9 +137,23 @@ impl Keyboard {
         }
     }
 
+    /// Process an event from the Win32 system and update internal state.
+    ///
+    /// <p style="background:rgba(255,181,77,0.16);padding:0.75em;">
+    /// <strong>Warning:</strong> This API is for advanced use only.
+    /// </p>
+    ///
     /// Process an event from the Win32 system and update internal state. This
-    /// event will be reflected in the next user call to [is_key_pressed] or
-    pub(crate) fn process_evt(&mut self, evt: KeyEvent) {
+    /// event will be reflected in the next user call to [`is_key_pressed`] or
+    /// added to the input buffer as appropriate.
+    ///
+    /// You do not normally need to call this function. A [`Window`] will manage
+    /// its own keyboard state automatically. This method is public only for
+    /// advanced uses or to enable unit testing in your own application.
+    ///
+    /// [`is_key_pressed`]: Self::is_key_pressed
+    /// [`Window`]: crate::window::Window
+    pub fn process_evt(&mut self, evt: KeyEvent) {
         match evt {
             KeyEvent::KeyDown { key_code, flags } => {
                 if !flags.was_previous_state_down {
@@ -111,8 +195,8 @@ impl Keyboard {
         *self.bit_for_key(key).as_ref()
     }
 
-    /// Drains all accumulated characters in the input queue and clears any
-    /// pending backspace events.
+    /// Drains all accumulated input in the input queue and clears any pending
+    /// backspace events.
     pub fn drain_input(&mut self) -> InputBuffer<impl ExactSizeIterator<Item = char> + '_> {
         let n_backspaces = self.n_backspaces;
         self.n_backspaces = 0;
@@ -166,6 +250,84 @@ impl Keyboard {
 
     fn mut_bit_for_key(&mut self, key: KeyCode) -> impl AsMut<bool> + '_ {
         self.pressed.get_mut(key.value() as usize).unwrap()
+    }
+}
+
+/// An object returned by [`Keyboard::drain_input()`] which encapsulates the
+/// pending text input.
+///
+/// The [`InputBuffer`] yields an iterator over the pending characters in
+/// the buffer via [`chars()`]
+///
+/// The [`InputBuffer`] also indicates the number of backspace events that
+/// occurred **prior** to the text in the buffer via [`num_backspaces()`].
+/// Typically, you would erase as many characters from the end of previously
+/// drained text as there are backspaces, before concatenating the new chars.
+/// Backspace events which occurred within the buffer are already applied to
+/// remove data in the buffer. It is only the backspace events which occurred
+/// prior to any input which you must handle yourself.
+///
+/// # Example
+///
+/// ```
+/// use ::skylight::input::keyboard::{Keyboard, KeyCode};
+///
+/// # struct Window {};
+/// # impl Window {
+/// #     fn keyboard(&self) -> Keyboard { Keyboard::new() }
+/// # }
+/// # let window = Window {};
+/// # let mut text = String::new();
+/// // let window = some window...
+/// // let mut text = some previous text input...
+///
+/// // Retrieve the keyboard for a given window.
+/// let mut keyboard = window.keyboard();
+///
+/// // Drain any pending text input and backspace events that came before the
+/// // input characters.
+/// let mut input = keyboard.drain_input();
+///
+/// // First process any pending backspace events by removing characters from
+/// // our existing text (backspaces _within_ the new pending text will have
+/// // already been applied for us):
+/// text.truncate(text.len().saturating_sub(input.num_backspaces()));
+///
+/// // Append any new characters in the input buffer:
+/// text.extend(input.chars());
+/// ```
+///
+/// [`Keyboard::drain_input()`]: crate::input::keyboard::Keyboard::drain_input
+/// [`chars()`]: InputBuffer::chars
+/// [`num_backspaces()`]: InputBuffer::num_backspaces
+pub struct InputBuffer<I>
+where
+    I: ExactSizeIterator<Item = char>,
+{
+    chars: I,
+    n_backspaces: usize,
+}
+
+impl<I> InputBuffer<I>
+where
+    I: ExactSizeIterator<Item = char>,
+{
+    /// The number of backspaces which **preceded** any text in the [`chars()`]
+    /// buffer and should be removed from to any **previously** drained input
+    /// if required.
+    ///
+    /// [`chars()`]: Self::chars
+    pub fn num_backspaces(&self) -> usize {
+        self.n_backspaces
+    }
+
+    /// The pending text input buffer.
+    ///
+    /// Any backspace events which happened **within** this buffer have already
+    /// been applied to the buffer contents and do not need to be taken into
+    /// consideration.
+    pub fn chars(&mut self) -> &mut impl ExactSizeIterator<Item = char> {
+        &mut self.chars
     }
 }
 
