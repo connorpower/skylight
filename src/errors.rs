@@ -1,18 +1,24 @@
 //! Crate-specific error and result types, plus common conversions.
 
 use ::std::fmt::{self, Display};
-
 use ::windows::{
-    core::{Error as Win32Error, HRESULT},
+    core::Error as Win32Error,
     Win32::Foundation::{SetLastError, NO_ERROR},
 };
 
-/// Result type returned by functions that call into Win32 API.
-pub type Result<T> = ::std::result::Result<T, Error>;
+/// Result type returned by fallible operations in the [`::skylight`][] crate.
+///
+/// [`::skylight`]: crate
+pub(crate) type Result<T> = ::std::result::Result<T, Error>;
 
-/// Error type for functions that call into Win32 API. The error attempts to
-/// pro-actively capture as much context as possible (error codes, system error
-/// message strings, etc).
+/// Error type for fallible operations in the [`::skylight`][] crate.
+///
+/// The only fallible operations are those that call into Win32 API. [`Error`]
+/// attempts to pro-actively capture as much context as possible (Windows
+/// error codes, system error message strings, API function name, contextual
+/// action hint).
+///
+/// [`::skylight`]: crate
 #[derive(Clone, Debug)]
 pub struct Error {
     /// The underlying Win32 error. Implements [`Display`] to conveniently
@@ -54,21 +60,33 @@ impl Display for Error {
 
 impl Error {
     /// Returns the underlying Win32 error code, if any.
-    pub fn code(&self) -> HRESULT {
-        self.underlying_error.code()
+    pub fn code(&self) -> i32 {
+        self.underlying_error.code().0
+    }
+
+    /// The name of the Win32 API function which failed, if known.
+    pub fn function(&self) -> Option<&str> {
+        self.function
+    }
+
+    /// An optional context information which describes what was happening
+    /// at the time error, if provided.
+    pub fn context(&self) -> Option<&str> {
+        self.context.as_deref()
     }
 }
 
 /// Gets the last Win32 error by calling [`GetLastError`].
 ///
-/// Returns `Ok` if there is no last error (e.g. if the Win32 error code is
-/// [`S_OK`]/[`ERROR_SUCCESS`]). Otherwise, returns `Err` with an inner error
-/// that contains the system error message and code.
+/// The value is returned as a `Result` type which is `Ok` if there is no last
+/// error (e.g. if the Win32 error code was [`S_OK`]/[`ERROR_SUCCESS`]).
+/// Otherwise, returns `Err` with an inner error that contains the system error
+/// message and code.
 ///
 /// [`S_OK`]: https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--0-499-
 /// [`ERROR_SUCCESS`]: https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--0-499-
 /// [`GetLastError`]: https://learn.microsoft.com/en-us/windows/win32/api/errhandlingapi/nf-errhandlingapi-getlasterror
-pub(crate) fn get_last_err() -> Result<()> {
+pub fn get_last_err() -> Result<()> {
     let last_err = Win32Error::from_win32();
 
     if last_err == Win32Error::OK {
@@ -87,7 +105,7 @@ pub(crate) fn get_last_err() -> Result<()> {
 ///
 /// [`S_OK`]: https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--0-499-
 /// [`ERROR_SUCCESS`]: https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--0-499-
-pub(crate) fn clear_last_error() {
+pub fn clear_last_error() {
     unsafe {
         SetLastError(NO_ERROR);
     }
